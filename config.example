@@ -1,0 +1,10 @@
+# work configuration file
+# Copy to ~/.config/work/config (or point WORK_CONFIG to any path)
+
+# Directory where git worktrees are created.
+# Default: ~/worktrees
+worktree_base=~/inflight
+
+# Prefix added to every branch name: <prefix>/<ticket>/<description>
+# Default: git config user.name (lowercased, spaces → hyphens), then whoami
+branch_prefix=myname
