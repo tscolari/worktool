@@ -1,5 +1,7 @@
 # WORK
 
+[![CI](https://github.com/tscolari/worktool/actions/workflows/ci.yml/badge.svg)](https://github.com/tscolari/worktool/actions/workflows/ci.yml)
+
 A vibecoded helper I created for my day to day usage.
 
 ## The flow
@@ -49,6 +51,18 @@ and an `overlays.default` exposing `pkgs.work`.
 
 Shell completions are installed as real files, so Nix users don't need the
 `eval` line below.
+
+### Prebuilt binary
+
+Grab a tarball for your platform from the
+[releases page](https://github.com/tscolari/worktool/releases) — linux and
+darwin, amd64 and arm64. Each archive contains the `work` binary,
+`config.example`, and shell completions under `completions/`.
+
+```
+tar xzf work_*_linux_amd64.tar.gz
+install -m755 work ~/.local/bin/work
+```
 
 ### Go
 

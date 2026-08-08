@@ -1,0 +1,43 @@
+version: 2
+project_name: work
+
+before:
+  hooks:
+    - go mod download
+    - mkdir -p completions
+    - sh -c 'go run ./cmd/work completion bash > completions/work.bash'
+    - sh -c 'go run ./cmd/work completion zsh  > completions/_work'
+    - sh -c 'go run ./cmd/work completion fish > completions/work.fish'
+
+builds:
+  - id: work
+    main: ./cmd/work
+    binary: work
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: work
+    formats: [tar.gz]
+    name_template: "work_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - src: README.md
+      - src: LICENSE
+      - src: config.example
+      - src: completions/*
+        dst: completions
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
