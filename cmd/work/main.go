@@ -10,10 +10,14 @@ import (
 	"github.com/tscolari/work/internal/config"
 )
 
+// version is overridden at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	root := &cobra.Command{
 		Use:           "work",
 		Short:         "Manage git worktree-based feature workspaces",
+		Version:       version,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}

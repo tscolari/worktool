@@ -17,6 +17,47 @@ With a quick tear down
 
 ---
 
+## Install
+
+### Nix
+
+```
+nix run github:tscolari/worktool -- start TKT-1234/creating-api-mocks   # try it
+nix profile install github:tscolari/worktool                            # keep it
+```
+
+As a flake input, with the Home Manager module:
+
+```nix
+{
+  inputs.worktool.url = "github:tscolari/worktool";
+
+  # ... then in your Home Manager config:
+  imports = [ inputs.worktool.homeManagerModules.default ];
+
+  programs.work = {
+    enable = true;
+    worktreeBase = "~/inflight";
+    branchPrefix = "tscolari";
+  };
+}
+```
+
+That installs the binary and writes `~/.config/work/config` for you. There is
+also `nixosModules.default` (`programs.work.enable`) for a system-wide install,
+and an `overlays.default` exposing `pkgs.work`.
+
+Shell completions are installed as real files, so Nix users don't need the
+`eval` line below.
+
+### Go
+
+```
+go install github.com/tscolari/work/cmd/work@latest
+```
+
+---
+
 ## With the tool
 
 1. `cd ./codebase`
@@ -37,7 +78,7 @@ work list                          # see all workspaces and whether a session ex
 work attach TKT-1234-creating-api-mocks  # reconnect (creates a new session if needed)
 ```
 
-Tab completion for workspace names: add `eval "$(work completion zsh)"` (or `bash`) to your shell rc.
+Tab completion for workspace names: add `eval "$(work completion zsh)"` (or `bash`) to your shell rc. Not needed if you installed via Nix.
 
 ### Cleaning up
 
