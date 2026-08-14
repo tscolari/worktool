@@ -1,4 +1,4 @@
-module github.com/tscolari/work
+module github.com/tscolari/worktool
 
 go 1.26.2
 

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tscolari/work/internal/gitx"
+	"github.com/tscolari/worktool/internal/gitx"
 )
 
 // RunCleanupBranches lists merged branches and deletes them after confirmation.

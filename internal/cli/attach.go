@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tscolari/work/internal/config"
-	"github.com/tscolari/work/internal/tmuxx"
+	"github.com/tscolari/worktool/internal/config"
+	"github.com/tscolari/worktool/internal/tmuxx"
 )
 
 // RunAttach reconnects to the named workspace, creating a tmux session if needed.
