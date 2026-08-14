@@ -5,15 +5,16 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  # Cheap and first: a mistyped tag should fail in seconds, not after the
+  # full CI matrix has run.
+  version-check:
+    name: version check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # goreleaser needs full history for the changelog
 
       # main.version is injected by ldflags in both build paths, so a tag that
       # disagrees with flake.nix means `work --version` lies about the build.
@@ -27,12 +28,26 @@ jobs:
           fi
           echo "tag v$TAG matches flake.nix"
 
+  # The same suite that gates main and pull requests, re-run against the
+  # tagged commit. Tag pushes don't trigger CI on their own.
+  ci:
+    name: ci
+    needs: version-check
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: [version-check, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # goreleaser publishes the GitHub release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # goreleaser needs full history for the changelog
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-
-      - name: Test
-        run: go test ./...
 
       - uses: goreleaser/goreleaser-action@v7
         with:
