@@ -5,10 +5,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/tscolari/work/internal/config"
-	"github.com/tscolari/work/internal/gitx"
-	"github.com/tscolari/work/internal/tmuxx"
-	"github.com/tscolari/work/internal/workspace"
+	"github.com/tscolari/worktool/internal/config"
+	"github.com/tscolari/worktool/internal/gitx"
+	"github.com/tscolari/worktool/internal/tmuxx"
+	"github.com/tscolari/worktool/internal/workspace"
 )
 
 const workUsage = "usage: work TICKET-NUM/kebab-description"

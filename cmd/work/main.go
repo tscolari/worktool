@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tscolari/work/internal/cli"
-	"github.com/tscolari/work/internal/config"
+	"github.com/tscolari/worktool/internal/cli"
+	"github.com/tscolari/worktool/internal/config"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".

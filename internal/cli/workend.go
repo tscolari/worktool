@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tscolari/work/internal/config"
-	"github.com/tscolari/work/internal/gitx"
-	"github.com/tscolari/work/internal/tmuxx"
+	"github.com/tscolari/worktool/internal/config"
+	"github.com/tscolari/worktool/internal/gitx"
+	"github.com/tscolari/worktool/internal/tmuxx"
 )
 
 // RunWorkend executes the `work end` command.
