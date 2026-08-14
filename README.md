@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/tscolari/worktool/actions/workflows/ci.yml/badge.svg)](https://github.com/tscolari/worktool/actions/workflows/ci.yml)
 
-A vibecoded helper I created for my day to day usage.
+{Worktree, Tmux session} Manager
 
 ## The flow
 
