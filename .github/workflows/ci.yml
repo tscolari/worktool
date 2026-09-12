@@ -67,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: DeterminateSystems/nix-installer-action@v22
+      - uses: DeterminateSystems/nix-installer-action@v23
 
       # Checks the host system only -- hence both runners. Do not add
       # --all-systems: it would try to build darwin derivations on Linux.
