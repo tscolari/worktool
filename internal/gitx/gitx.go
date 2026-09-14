@@ -80,6 +80,58 @@ func BranchOfWorktree(path string) (string, error) {
 	return strings.TrimPrefix(ref, "refs/heads/"), nil
 }
 
+// BranchOfWorktreeByPath looks up a worktree's branch from
+// `git worktree list --porcelain` by matching the filesystem path. Unlike
+// BranchOfWorktree, this does not require the worktree directory to exist.
+func BranchOfWorktreeByPath(repoDir, worktreePath string) (string, error) {
+	out, err := output(repoDir, "git", "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", err
+	}
+
+	target := filepath.Clean(worktreePath)
+
+	var curPath, curBranch string
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	check := func() string {
+		if filepath.Clean(curPath) == target && curBranch != "" {
+			return strings.TrimPrefix(curBranch, "refs/heads/")
+		}
+		return ""
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			if b := check(); b != "" {
+				return b, nil
+			}
+			curPath, curBranch = "", ""
+			continue
+		}
+		key, val, _ := strings.Cut(line, " ")
+		switch key {
+		case "worktree":
+			curPath = val
+		case "branch":
+			curBranch = val
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("scan worktree list: %w", err)
+	}
+	if b := check(); b != "" {
+		return b, nil
+	}
+	return "", fmt.Errorf("worktree at %s not found in git worktree list", worktreePath)
+}
+
+// WorktreePrune removes stale worktree entries whose directories no longer
+// exist on disk.
+func WorktreePrune(dir string) error {
+	return run(dir, "git", "worktree", "prune")
+}
+
 // BranchCheckedOutElsewhere returns the worktree path (other than exceptPath)
 // where branch is currently checked out, or "" if nowhere else.
 func BranchCheckedOutElsewhere(repoDir, branch, exceptPath string) (string, error) {
