@@ -17,7 +17,7 @@
 
       forAllSystems = f: lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      version = "0.0.6" + lib.optionalString (self ? shortRev) "-${self.shortRev}";
+      version = "0.0.7" + lib.optionalString (self ? shortRev) "-${self.shortRev}";
 
       workFor = pkgs: pkgs.callPackage ./nix/package.nix { inherit version; };
     in
