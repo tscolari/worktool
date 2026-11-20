@@ -115,4 +115,34 @@ func TestWorkConfigEnvOverride(t *testing.T) {
 	}
 }
 
+func TestConfigDir(t *testing.T) {
+	t.Run("WORK_CONFIG sets the directory", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("HOME", tmp)
+		t.Setenv("WORK_CONFIG", filepath.Join(tmp, "sub", "config"))
+
+		got, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := filepath.Join(tmp, "sub"); got.Dir != want {
+			t.Errorf("Dir = %q, want %q", got.Dir, want)
+		}
+	})
+
+	t.Run("default location", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("WORK_CONFIG", "")
+
+		got, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := filepath.Join(home, ".config", "work"); got.Dir != want {
+			t.Errorf("Dir = %q, want %q", got.Dir, want)
+		}
+	})
+}
+
 func ptr(s string) *string { return &s }

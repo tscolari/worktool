@@ -32,13 +32,14 @@ func HasSession(name string) (bool, error) {
 }
 
 // NewSessionAttached replaces the current process with `tmux new-session`.
-// On success, this function does not return.
-func NewSessionAttached(name, cwd string) error {
+// A non-empty command becomes the session's shell command instead of the
+// default shell. On success, this function does not return.
+func NewSessionAttached(name, cwd, command string) error {
 	bin, err := exec.LookPath("tmux")
 	if err != nil {
 		return fmt.Errorf("locate tmux: %w", err)
 	}
-	argv := []string{"tmux", "new-session", "-s", name, "-c", cwd}
+	argv := append([]string{"tmux"}, newSessionArgs(name, cwd, command, false)...)
 	if err := syscall.Exec(bin, argv, os.Environ()); err != nil {
 		return fmt.Errorf("exec tmux: %w", err)
 	}
@@ -60,8 +61,22 @@ func AttachSession(name string) error {
 	return nil
 }
 
-func NewSessionDetached(name, cwd string) error {
-	return run("tmux", "new-session", "-d", "-s", name, "-c", cwd)
+// NewSessionDetached creates a detached session; command as in
+// NewSessionAttached.
+func NewSessionDetached(name, cwd, command string) error {
+	return run("tmux", newSessionArgs(name, cwd, command, true)...)
+}
+
+func newSessionArgs(name, cwd, command string, detached bool) []string {
+	args := []string{"new-session"}
+	if detached {
+		args = append(args, "-d")
+	}
+	args = append(args, "-s", name, "-c", cwd)
+	if command != "" {
+		args = append(args, command)
+	}
+	return args
 }
 
 func SwitchClient(name string) error {

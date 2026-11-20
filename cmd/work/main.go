@@ -36,14 +36,18 @@ func main() {
 }
 
 func startCmd() *cobra.Command {
-	return &cobra.Command{
+	var opts cli.StartOptions
+	cmd := &cobra.Command{
 		Use:   "start TICKET/kebab-description",
 		Short: "Create a new feature workspace (branch + worktree + tmux session)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.RunWork(args, cmd.ErrOrStderr())
+			return cli.RunWork(args, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
+	cmd.Flags().StringVar(&opts.Profile, "profile", "", "run this profile's hooks for the workspace (from <config dir>/profiles/<name>)")
+	cmd.Flags().StringVar(&opts.From, "from", "", "start the branch at this ref instead of HEAD (no fetch)")
+	return cmd
 }
 
 func endCmd() *cobra.Command {
@@ -98,7 +102,7 @@ func attachCmd() *cobra.Command {
 		Short: "Reconnect to a workspace, creating a tmux session if needed",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.RunAttach(args[0], cmd.ErrOrStderr())
+			return cli.RunAttach(args[0], cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 

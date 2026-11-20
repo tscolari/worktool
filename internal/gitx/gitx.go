@@ -39,8 +39,58 @@ func BranchExists(dir, branch string) (bool, error) {
 	return false, fmt.Errorf("git show-ref: %w", err)
 }
 
-func WorktreeAdd(dir, path, branch string) error {
-	return run(dir, "git", "worktree", "add", "-b", branch, path)
+// WorktreeAdd creates branch at startPoint and checks it out in a new
+// worktree at path. --no-track keeps git's branch.autoSetupMerge from making
+// a remote-tracking start point the branch's upstream.
+func WorktreeAdd(dir, path, branch, startPoint string) error {
+	return run(dir, "git", "worktree", "add", "--no-track", "-b", branch, path, startPoint)
+}
+
+// ErrUnknownRef is returned by ResolveBase for a ref that doesn't name a commit.
+var ErrUnknownRef = errors.New("unknown ref")
+
+// ResolveBase returns ref's full name and commit. fullRef is "" when ref
+// isn't symbolic (a bare SHA) or is a detached HEAD. It never fetches.
+func ResolveBase(dir, ref string) (fullRef, commit string, err error) {
+	out, err := output(dir, "git", "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return "", "", fmt.Errorf("%w: %q", ErrUnknownRef, ref)
+		}
+		return "", "", err
+	}
+	commit = strings.TrimSpace(out)
+
+	// ref verified above, so it can't be read as an option here. Without
+	// --verify, rev-parse would echo an --end-of-options marker back.
+	out, err = output(dir, "git", "rev-parse", "--symbolic-full-name", ref)
+	if err != nil {
+		return "", "", err
+	}
+	fullRef = strings.TrimSpace(out)
+	if fullRef == "HEAD" {
+		fullRef = ""
+	}
+	return fullRef, commit, nil
+}
+
+// BranchConfig reads branch.<branch>.<key>. An unset key returns "".
+func BranchConfig(dir, branch, key string) (string, error) {
+	out, err := output(dir, "git", "config", "--get", "branch."+branch+"."+key)
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 1 {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// SetBranchConfig writes branch.<branch>.<key>.
+func SetBranchConfig(dir, branch, key, value string) error {
+	return run(dir, "git", "config", "branch."+branch+"."+key, value)
 }
 
 func WorktreeRemove(dir, path string) error {

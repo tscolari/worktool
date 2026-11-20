@@ -62,6 +62,17 @@ it. If you're not, it replaces itself with `tmux new-session`. Either way you en
 new workspace. If tmux isn't installed at all, you still get the branch and worktree, with
 a warning that the session was skipped.
 
+Flags:
+- `--from <ref>` — start the branch at `<ref>` instead of HEAD, e.g.
+  `work start TKT-1234/backport --from origin/branch/v18`. It saves you a `reset --hard`
+  once you're inside the worktree. Nothing is fetched, so the ref is used exactly as it is
+  locally; `git fetch` first if it might be stale. The new branch gets no upstream, even
+  when `<ref>` is a remote branch, so a plain `git push` can't land on the base by
+  accident.
+- `--profile <name>` — run a [profile](#profiles)'s hooks for this workspace. The choice
+  is recorded on the branch, and `attach`, `list` and `end` pick it up from there without
+  the flag.
+
 ### `work attach <workspace-name>`
 
 The everyday way back into a workspace. It takes the workspace name (the dashed form) and
@@ -113,8 +124,16 @@ name, so it stays correct even if things drift. Before deleting anything it chec
   A branch with no upstream configured, which is the normal case for fresh work, passes
   this check.
 
+If the workspace has a [profile](#profiles), its `pre-end` hook runs after these checks
+and can refuse the teardown. `--force` doesn't skip it; the hook sees `WORK_FORCE=1` and
+decides for itself.
+
+When the worktree directory is already gone and its branch can no longer be found, `end`
+can't tell whether the workspace had a profile. If you have any profiles, it refuses unless
+you pass `--force`; without profiles it cleans up as it always did.
+
 Flags:
-- `--force` — skip the unmerged-commits check
+- `--force` — skip the unmerged-commits check (and allow the cleanup above)
 - `--dry-run` — print what would happen without doing anything
 
 ### `work cleanup-branches`
@@ -170,6 +189,62 @@ Both keys are optional:
 The format is one `key=value` per line. Blank lines and `#` comments are ignored, and an
 unknown key is an error rather than something silently skipped. See
 [`config.example`](./config.example).
+
+---
+
+## Profiles
+
+A profile lets a workspace do more than branch + worktree + tmux, without teaching
+worktool what that "more" is. It's a directory of executables, one per event:
+
+```
+~/.config/work/profiles/<name>/
+  post-start
+  pre-attach
+  session-command
+  list
+  pre-end
+  post-end
+```
+
+The directory sits next to the config file, so `WORK_CONFIG` moves it too. Names match
+`^[a-z0-9][a-z0-9-]*$`. Every hook is optional, but a hook file that isn't executable is an
+error, not something quietly skipped.
+
+You opt in per workspace with `work start --profile <name>`. worktool records the name in
+the main repo's config as `branch.<branch>.workProfile`; workspaces without it run no hooks
+and behave exactly as before.
+
+| hook | runs | contract |
+|---|---|---|
+| `post-start` | in `start`, after the worktree exists, before tmux | A non-zero exit rolls the worktree and branch back. Cleaning up what the hook itself created is up to the hook. |
+| `pre-attach` | on every `attach`, before tmux is touched | A non-zero exit aborts `attach`. |
+| `session-command` | when `start` or `attach` creates a tmux session | The first line of stdout becomes the session's command; empty means your default shell. Not run when `attach` finds a live session. |
+| `list` | once per profile in `work list` | Gets every workspace of the profile in `WORK_NAMES`, prints `name<TAB>annotation` lines, appended as a last column. A failure is a warning. |
+| `pre-end` | in `end`, after worktool's checks, before anything is deleted | A non-zero exit aborts `end`, even with `--force`. Under `--dry-run` it runs and must not change anything. |
+| `post-end` | in `end`, after the worktree and branch are gone, before the tmux session is killed | For teardown. A failure is a warning. |
+
+Leaving a workspace can mean a detach (the session stays and the next `attach` just
+switches to it) or an exit (the session ends and the next `attach` creates a new one).
+`session-command` only sees the second, so anything that has to happen on every return
+belongs in `pre-attach`.
+
+Hooks inherit your environment, your terminal (except `session-command` and `list`,
+whose stdout is read), and these variables:
+
+| variable | value |
+|---|---|
+| `WORK_PROFILE` | the profile name |
+| `WORK_NAME` | workspace name, e.g. `TKT-1234-creating-api-mocks` |
+| `WORK_BRANCH` | the full branch name |
+| `WORK_PATH` | the worktree path |
+| `WORK_REPO` | the main repository directory |
+| `WORK_BASE_REF`, `WORK_BASE_COMMIT` | `post-start` only: the base's full ref name (empty for a bare SHA or a detached HEAD) and its commit |
+| `WORK_FORCE`, `WORK_DRY_RUN` | `pre-end` only: `1` or empty |
+| `WORK_NAMES` | `list` only, instead of the workspace variables: one workspace name per line |
+
+A hook runs inside the worktree, or in the main repository once the worktree is gone
+(`post-end`, and `end`'s recovery path).
 
 ---
 

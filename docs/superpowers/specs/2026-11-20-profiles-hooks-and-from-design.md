@@ -83,7 +83,7 @@ Anything that has to happen on every return goes in `pre-attach`, and it then wo
 ### `end` and the profile
 
 - `end` reads `branch.<branch>.workProfile` before `git branch -D`, which deletes the branch's config section.
-- In the recovery path the worktree directory is already gone. If the branch can still be resolved through worktree metadata, the profile is read as usual. If it can't, `end` fails with a user error naming the stale path, unless `--force` is passed. This protects against the anti-goal of a profile that silently stops applying.
+- In the recovery path the worktree directory is already gone. If the branch can still be resolved through worktree metadata, the profile is read as usual. If it can't and any profile directory exists, `end` fails with a user error naming the stale path, unless `--force` is passed. This protects against the anti-goal of a profile that silently stops applying. With no profiles at all, no hook could be skipped, and `end` cleans up as it did before profiles existed (changed after review: refusing in that case broke the "no profile, no change" goal).
 
 ### `--from <ref>`
 

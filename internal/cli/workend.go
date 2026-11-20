@@ -8,6 +8,7 @@ import (
 
 	"github.com/tscolari/worktool/internal/config"
 	"github.com/tscolari/worktool/internal/gitx"
+	"github.com/tscolari/worktool/internal/hooks"
 	"github.com/tscolari/worktool/internal/tmuxx"
 )
 
@@ -64,6 +65,7 @@ func RunWorkend(force, dryRun bool, stdout, stderr io.Writer) error {
 		}
 	}
 
+	var profile *hooks.Profile
 	if branch != "" {
 		other, err := gitx.BranchCheckedOutElsewhere(repoDir, branch, cwd)
 		if err != nil {
@@ -71,6 +73,12 @@ func RunWorkend(force, dryRun bool, stdout, stderr io.Writer) error {
 		}
 		if other != "" {
 			return userErr("branch %s is checked out at %s; remove that worktree first", branch, other)
+		}
+
+		// Read the profile now: `git branch -D` below deletes the branch's
+		// config section, profile record included.
+		if profile, err = workspaceProfile(cfg, repoDir, branch); err != nil {
+			return err
 		}
 
 		if !force {
@@ -82,6 +90,19 @@ func RunWorkend(force, dryRun bool, stdout, stderr io.Writer) error {
 				return userErr("branch %s has unmerged commits vs upstream; pass --force to delete anyway", branch)
 			}
 		}
+	} else if !force && profilesConfigured(cfg) {
+		// Without the branch there is no way to know whether the workspace
+		// had a profile, and tearing down without its hooks could skip
+		// whatever they guard. With no profiles at all there's nothing to
+		// skip, and end behaves as it always did.
+		return userErr("cannot find the branch of %s (worktree already gone), so its profile hooks can't run; pass --force to clean up anyway", cwd)
+	}
+
+	env := hooks.Env{Name: name, Branch: branch, Path: filepath.Join(cfg.WorktreeBase, name), Repo: repoDir}
+	preEnv := env
+	preEnv.Extra = map[string]string{"WORK_FORCE": flag(force), "WORK_DRY_RUN": flag(dryRun)}
+	if err := runHook(profile, hooks.PreEnd, preEnv, stdout, stderr); err != nil {
+		return err
 	}
 
 	if dryRun {
@@ -93,6 +114,9 @@ func RunWorkend(force, dryRun bool, stdout, stderr io.Writer) error {
 		}
 		if branch != "" {
 			fmt.Fprintf(stdout, "would delete branch:     %s\n", branch)
+		}
+		if profile != nil {
+			fmt.Fprintf(stdout, "would run post-end hook (profile %s)\n", profile.Name)
 		}
 		return nil
 	}
@@ -118,6 +142,12 @@ func RunWorkend(force, dryRun bool, stdout, stderr io.Writer) error {
 		}
 	}
 
+	// post-end runs once the workspace is gone and before tmux, which may
+	// take this process down with the session.
+	if err := runHook(profile, hooks.PostEnd, env, stdout, stderr); err != nil {
+		fmt.Fprintf(stderr, "warning: %v\n", err)
+	}
+
 	// Kill the tmux session last. This may terminate the current process if
 	// workend was launched from within that session, so nothing important
 	// should follow it.
@@ -134,6 +164,13 @@ func RunWorkend(force, dryRun bool, stdout, stderr io.Writer) error {
 	}
 
 	return nil
+}
+
+func flag(b bool) string {
+	if b {
+		return "1"
+	}
+	return ""
 }
 
 // resolveWorkingDir returns the current working directory. When os.Getwd

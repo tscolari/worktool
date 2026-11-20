@@ -15,6 +15,9 @@ import (
 type Config struct {
 	WorktreeBase string
 	BranchPrefix string
+	// Dir is the directory holding the config file (whether or not the file
+	// exists). Profiles live under Dir/profiles.
+	Dir string
 }
 
 func Load() (*Config, error) {
@@ -27,7 +30,7 @@ func Load() (*Config, error) {
 		path = filepath.Join(home, ".config", "work", "config")
 	}
 
-	cfg := &Config{}
+	cfg := &Config{Dir: filepath.Dir(path)}
 	if err := parseFile(path, cfg); err != nil {
 		return nil, err
 	}
