@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/tscolari/worktool/internal/gitx"
 	"github.com/tscolari/worktool/internal/hooks"
 )
@@ -31,15 +33,10 @@ func TestEndPreEndBlocks(t *testing.T) {
 			err := RunWorkend(tt.force, false, &strings.Builder{}, &strings.Builder{})
 
 			requireCode(t, err, 1)
-			if !exists(path) {
-				t.Fatal("worktree removed although pre-end refused")
-			}
-			if ok, _ := gitx.BranchExists(clone, testBranch); !ok {
-				t.Fatal("branch deleted although pre-end refused")
-			}
-			if got := readFile(t, filepath.Join(logDir, "pre-end")); got != tt.wantForce {
-				t.Fatalf("pre-end saw WORK_FORCE=%q, want %q", got, tt.wantForce)
-			}
+			require.DirExists(t, path, "worktree removed although pre-end refused")
+			ok, _ := gitx.BranchExists(clone, testBranch)
+			require.True(t, ok, "branch deleted although pre-end refused")
+			require.Equal(t, tt.wantForce, readFile(t, filepath.Join(logDir, "pre-end")), "pre-end WORK_FORCE")
 		})
 	}
 }
@@ -54,22 +51,12 @@ func TestEndDryRun(t *testing.T) {
 	t.Chdir(path)
 
 	var stdout strings.Builder
-	if err := RunWorkend(false, true, &stdout, &strings.Builder{}); err != nil {
-		t.Fatalf("RunWorkend --dry-run: %v", err)
-	}
+	require.NoError(t, RunWorkend(false, true, &stdout, &strings.Builder{}))
 
-	if got := readFile(t, filepath.Join(logDir, "pre-end")); got != "1\n" {
-		t.Fatalf("pre-end saw WORK_DRY_RUN=%q, want 1", got)
-	}
-	if !exists(path) {
-		t.Fatal("dry run removed the worktree")
-	}
-	if exists(filepath.Join(logDir, "post-end")) {
-		t.Fatal("post-end ran during a dry run")
-	}
-	if !strings.Contains(stdout.String(), "would run post-end hook (profile remote)") {
-		t.Fatalf("dry-run output %q does not mention post-end", stdout.String())
-	}
+	require.Equal(t, "1\n", readFile(t, filepath.Join(logDir, "pre-end")), "pre-end WORK_DRY_RUN")
+	require.DirExists(t, path, "dry run removed the worktree")
+	require.NoFileExists(t, filepath.Join(logDir, "post-end"), "post-end ran during a dry run")
+	require.Contains(t, stdout.String(), "would run post-end hook (profile remote)")
 }
 
 func TestEndPostEndAfterGitBeforeTmux(t *testing.T) {
@@ -83,20 +70,15 @@ func TestEndPostEndAfterGitBeforeTmux(t *testing.T) {
 	t.Setenv("FAKE_TMUX_WATCH", filepath.Join(logDir, "post-end"))
 	t.Chdir(path)
 
-	if err := RunWorkend(false, false, &strings.Builder{}, &strings.Builder{}); err != nil {
-		t.Fatalf("RunWorkend: %v", err)
-	}
+	require.NoError(t, RunWorkend(false, false, &strings.Builder{}, &strings.Builder{}))
 
-	if ok, _ := gitx.BranchExists(clone, testBranch); ok {
-		t.Fatal("branch not deleted")
-	}
-	if got := readFile(t, filepath.Join(logDir, "post-end")); got != "remote\nabsent\n" {
-		t.Fatalf("post-end saw %q, want profile remote and the worktree already gone", got)
-	}
+	ok, _ := gitx.BranchExists(clone, testBranch)
+	require.False(t, ok, "branch not deleted")
+	require.Equal(t, "remote\nabsent\n", readFile(t, filepath.Join(logDir, "post-end")),
+		"post-end should see profile remote and the worktree already gone")
 	calls := tmuxLog(t, log)
-	if last := calls[len(calls)-1]; last != "kill-session -t T-1-x watched=yes" {
-		t.Fatalf("last tmux call = %q, want kill-session after post-end ran", last)
-	}
+	require.NotEmpty(t, calls, "no tmux calls")
+	require.Equal(t, "kill-session -t T-1-x watched=yes", calls[len(calls)-1], "want kill-session after post-end ran")
 }
 
 func TestEndPostEndFailureWarns(t *testing.T) {
@@ -107,12 +89,8 @@ func TestEndPostEndFailureWarns(t *testing.T) {
 	t.Chdir(path)
 
 	var stderr strings.Builder
-	if err := RunWorkend(false, false, &strings.Builder{}, &stderr); err != nil {
-		t.Fatalf("RunWorkend: %v (post-end failure must not fail end)", err)
-	}
-	if !strings.Contains(stderr.String(), "warning:") {
-		t.Fatalf("stderr %q: want a warning about post-end", stderr.String())
-	}
+	require.NoError(t, RunWorkend(false, false, &strings.Builder{}, &stderr), "post-end failure must not fail end")
+	require.Contains(t, stderr.String(), "warning:")
 }
 
 func TestEndProfileDirGone(t *testing.T) {
@@ -120,17 +98,13 @@ func TestEndProfileDirGone(t *testing.T) {
 	cfgDir, base := setupConfig(t)
 	writeHook(t, cfgDir, "remote", hooks.PreEnd, "exit 0")
 	path := startWorkspace(t, clone, base, StartOptions{Profile: "remote"})
-	if err := os.RemoveAll(filepath.Join(cfgDir, "profiles", "remote")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.RemoveAll(filepath.Join(cfgDir, "profiles", "remote")))
 	t.Chdir(path)
 
 	err := RunWorkend(true, false, &strings.Builder{}, &strings.Builder{})
 
 	requireCode(t, err, 1)
-	if !exists(path) {
-		t.Fatal("worktree removed although its profile can't be loaded")
-	}
+	require.DirExists(t, path, "worktree removed although its profile can't be loaded")
 }
 
 // orphanWorkspace creates T-1-x plus a sibling (so end can still find the
@@ -141,9 +115,7 @@ func orphanWorkspace(t *testing.T) string {
 	clone := newClone(t)
 	_, base := setupConfig(t)
 	path := startWorkspace(t, clone, base, StartOptions{})
-	if err := RunWork([]string{"T-2/y"}, StartOptions{}, &strings.Builder{}, &strings.Builder{}); err != nil {
-		t.Fatalf("RunWork sibling: %v", err)
-	}
+	require.NoError(t, RunWork([]string{"T-2/y"}, StartOptions{}, &strings.Builder{}, &strings.Builder{}), "RunWork sibling")
 	t.Chdir(path)
 	t.Setenv("PWD", path)
 	git(t, clone, "worktree", "remove", "--force", path)
@@ -158,13 +130,9 @@ func TestEndRecoveryUnknownBranch(t *testing.T) {
 
 	err := RunWorkend(false, false, &strings.Builder{}, &strings.Builder{})
 	msg := requireCode(t, err, 1)
-	if !strings.Contains(msg, path) {
-		t.Fatalf("error %q does not name the stale path %s", msg, path)
-	}
+	require.Contains(t, msg, path, "error should name the stale path")
 
-	if err := RunWorkend(true, false, &strings.Builder{}, &strings.Builder{}); err != nil {
-		t.Fatalf("RunWorkend --force on the recovery path: %v", err)
-	}
+	require.NoError(t, RunWorkend(true, false, &strings.Builder{}, &strings.Builder{}), "--force on the recovery path")
 }
 
 // Without any profiles, no hook could have been skipped: the recovery path
@@ -172,7 +140,5 @@ func TestEndRecoveryUnknownBranch(t *testing.T) {
 func TestEndRecoveryNoProfilesUnchanged(t *testing.T) {
 	orphanWorkspace(t)
 
-	if err := RunWorkend(false, false, &strings.Builder{}, &strings.Builder{}); err != nil {
-		t.Fatalf("RunWorkend on the recovery path without profiles: %v", err)
-	}
+	require.NoError(t, RunWorkend(false, false, &strings.Builder{}, &strings.Builder{}))
 }

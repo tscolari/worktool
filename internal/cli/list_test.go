@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/tscolari/worktool/internal/hooks"
 )
 
@@ -15,9 +17,7 @@ func startNamed(t *testing.T, clone string, args map[string]StartOptions) {
 	noTmux(t)
 	t.Chdir(clone)
 	for arg, opts := range args {
-		if err := RunWork([]string{arg}, opts, &strings.Builder{}, &strings.Builder{}); err != nil {
-			t.Fatalf("RunWork %s: %v", arg, err)
-		}
+		require.NoError(t, RunWork([]string{arg}, opts, &strings.Builder{}, &strings.Builder{}), "RunWork %s", arg)
 	}
 }
 
@@ -38,21 +38,15 @@ func TestListAnnotations(t *testing.T) {
 	})
 
 	var stdout strings.Builder
-	if err := RunList(&stdout, &strings.Builder{}); err != nil {
-		t.Fatalf("RunList: %v", err)
-	}
+	require.NoError(t, RunList(&stdout, &strings.Builder{}))
 
 	want := strings.Join([]string{
 		listLine("A-a", "tester/A/a") + "  [remote: b1]",
 		listLine("B-b", "tester/B/b") + "  [remote: b2]",
 		listLine("C-c", "tester/C/c"),
 	}, "\n") + "\n"
-	if stdout.String() != want {
-		t.Fatalf("list output:\n%s\nwant:\n%s", stdout.String(), want)
-	}
-	if got := readFile(t, filepath.Join(logDir, "list")); got != "A-a\nB-b\n" {
-		t.Fatalf("list hook runs saw WORK_NAMES %q, want one run with A-a and B-b", got)
-	}
+	require.Equal(t, want, stdout.String(), "list output")
+	require.Equal(t, "A-a\nB-b\n", readFile(t, filepath.Join(logDir, "list")), "want one list hook run with A-a and B-b")
 }
 
 func TestListHookFails(t *testing.T) {
@@ -65,15 +59,9 @@ func TestListHookFails(t *testing.T) {
 	})
 
 	var stdout, stderr strings.Builder
-	if err := RunList(&stdout, &stderr); err != nil {
-		t.Fatalf("RunList must not fail when a list hook fails: %v", err)
-	}
+	require.NoError(t, RunList(&stdout, &stderr), "RunList must not fail when a list hook fails")
 
 	want := listLine("A-a", "tester/A/a") + "\n" + listLine("C-c", "tester/C/c") + "\n"
-	if stdout.String() != want {
-		t.Fatalf("list output:\n%s\nwant:\n%s", stdout.String(), want)
-	}
-	if !strings.Contains(stderr.String(), "warning:") {
-		t.Fatalf("stderr %q: want a warning about the failed hook", stderr.String())
-	}
+	require.Equal(t, want, stdout.String(), "list output")
+	require.Contains(t, stderr.String(), "warning:", "want a warning about the failed hook")
 }

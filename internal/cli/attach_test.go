@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/tscolari/worktool/internal/hooks"
 )
 
@@ -27,26 +29,16 @@ func TestAttachPreAttachBothPaths(t *testing.T) {
 			path := startWorkspace(t, clone, base, StartOptions{Profile: "remote"})
 			log := fakeTmux(t, tt.hasSession)
 
-			if err := RunAttach("T-1-x", &strings.Builder{}, &strings.Builder{}); err != nil {
-				t.Fatalf("RunAttach: %v", err)
-			}
+			require.NoError(t, RunAttach("T-1-x", &strings.Builder{}, &strings.Builder{}))
 
-			if got := readFile(t, filepath.Join(logDir, "pre-attach")); got != "T-1-x\n" {
-				t.Fatalf("pre-attach runs = %q, want exactly one for T-1-x", got)
-			}
+			require.Equal(t, "T-1-x\n", readFile(t, filepath.Join(logDir, "pre-attach")), "want exactly one pre-attach run for T-1-x")
 			calls := strings.Join(tmuxLog(t, log), "\n")
 			if tt.hasSession {
-				if !strings.Contains(calls, "switch-client -t T-1-x") {
-					t.Fatalf("tmux calls %q: want switch-client to the live session", calls)
-				}
-				if exists(filepath.Join(logDir, "session-command")) {
-					t.Fatal("session-command ran although the session already existed")
-				}
+				require.Contains(t, calls, "switch-client -t T-1-x", "want switch-client to the live session")
+				require.NoFileExists(t, filepath.Join(logDir, "session-command"), "session-command ran although the session already existed")
 				return
 			}
-			if want := "new-session -d -s T-1-x -c " + path + " ssh host-a"; !strings.Contains(calls, want) {
-				t.Fatalf("tmux calls %q: want %q", calls, want)
-			}
+			require.Contains(t, calls, "new-session -d -s T-1-x -c "+path+" ssh host-a")
 		})
 	}
 }
@@ -61,9 +53,7 @@ func TestAttachPreAttachFails(t *testing.T) {
 	err := RunAttach("T-1-x", &strings.Builder{}, &strings.Builder{})
 
 	requireCode(t, err, 1)
-	if calls := tmuxLog(t, log); len(calls) != 0 {
-		t.Fatalf("tmux touched after pre-attach failed: %q", calls)
-	}
+	require.Empty(t, tmuxLog(t, log), "tmux touched after pre-attach failed")
 }
 
 func TestAttachProfileDirGone(t *testing.T) {
@@ -71,20 +61,14 @@ func TestAttachProfileDirGone(t *testing.T) {
 	cfgDir, base := setupConfig(t)
 	writeHook(t, cfgDir, "remote", hooks.PreAttach, "exit 0")
 	startWorkspace(t, clone, base, StartOptions{Profile: "remote"})
-	if err := os.RemoveAll(filepath.Join(cfgDir, "profiles", "remote")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.RemoveAll(filepath.Join(cfgDir, "profiles", "remote")))
 	log := fakeTmux(t, true)
 
 	err := RunAttach("T-1-x", &strings.Builder{}, &strings.Builder{})
 
 	msg := requireCode(t, err, 1)
-	if !strings.Contains(msg, "remote") {
-		t.Fatalf("error %q does not name the profile", msg)
-	}
-	if calls := tmuxLog(t, log); len(calls) != 0 {
-		t.Fatalf("tmux touched although the profile is missing: %q", calls)
-	}
+	require.Contains(t, msg, "remote", "error should name the profile")
+	require.Empty(t, tmuxLog(t, log), "tmux touched although the profile is missing")
 }
 
 func TestAttachDetachedNoProfile(t *testing.T) {
@@ -94,10 +78,6 @@ func TestAttachDetachedNoProfile(t *testing.T) {
 	git(t, path, "checkout", "-q", "--detach")
 	log := fakeTmux(t, false)
 
-	if err := RunAttach("T-1-x", &strings.Builder{}, &strings.Builder{}); err != nil {
-		t.Fatalf("RunAttach on detached workspace: %v", err)
-	}
-	if calls := strings.Join(tmuxLog(t, log), "\n"); !strings.Contains(calls, "new-session -d -s T-1-x -c "+path) {
-		t.Fatalf("tmux calls %q: want a new session", calls)
-	}
+	require.NoError(t, RunAttach("T-1-x", &strings.Builder{}, &strings.Builder{}), "RunAttach on detached workspace")
+	require.Contains(t, strings.Join(tmuxLog(t, log), "\n"), "new-session -d -s T-1-x -c "+path, "want a new session")
 }

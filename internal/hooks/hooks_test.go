@@ -2,58 +2,45 @@ package hooks
 
 import (
 	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setupProfile(t *testing.T, name string) (cfgDir string, p Profile) {
 	t.Helper()
 	cfgDir = t.TempDir()
 	dir := filepath.Join(cfgDir, "profiles", name)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o755))
 	p, err := Open(cfgDir, name)
-	if err != nil {
-		t.Fatalf("Open(%q): %v", name, err)
-	}
+	require.NoError(t, err, "Open(%q)", name)
 	return cfgDir, p
 }
 
 func writeHook(t *testing.T, p Profile, ev Event, body string, mode os.FileMode) string {
 	t.Helper()
 	path := filepath.Join(p.Dir, string(ev))
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), mode); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), mode))
 	return path
 }
 
 func realpath(t *testing.T, p string) string {
 	t.Helper()
 	r, err := filepath.EvalSymlinks(p)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return r
 }
 
 func TestOpen(t *testing.T) {
 	cfgDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(cfgDir, "profiles", "remote"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(cfgDir, "profiles", "remote"), 0o755))
 
 	got, err := Open(cfgDir, "remote")
-	if err != nil {
-		t.Fatalf("Open(remote): %v", err)
-	}
-	want := Profile{Name: "remote", Dir: filepath.Join(cfgDir, "profiles", "remote")}
-	if got != want {
-		t.Fatalf("Open(remote) = %+v, want %+v", got, want)
-	}
+	require.NoError(t, err)
+	require.Equal(t, Profile{Name: "remote", Dir: filepath.Join(cfgDir, "profiles", "remote")}, got)
 
 	tests := []struct {
 		name    string
@@ -70,22 +57,18 @@ func TestOpen(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Open(cfgDir, tt.profile)
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("Open(%q) error = %v, want %v", tt.profile, err, tt.wantErr)
-			}
+			require.ErrorIs(t, err, tt.wantErr)
 		})
 	}
 }
 
 func TestRunMissingHookIsNoop(t *testing.T) {
 	_, p := setupProfile(t, "remote")
-	if err := p.Run(PostStart, Env{}, nil, nil, nil); err != nil {
-		t.Fatalf("Run on missing hook: %v", err)
-	}
+	require.NoError(t, p.Run(PostStart, Env{}, nil, nil, nil))
+
 	out, err := p.Output(SessionCommand, Env{}, nil)
-	if err != nil || out != "" {
-		t.Fatalf("Output on missing hook = %q, %v; want \"\", nil", out, err)
-	}
+	require.NoError(t, err)
+	require.Empty(t, out)
 }
 
 func TestRunNotExecutable(t *testing.T) {
@@ -93,12 +76,7 @@ func TestRunNotExecutable(t *testing.T) {
 	path := writeHook(t, p, PostStart, "exit 0", 0o644)
 
 	err := p.Run(PostStart, Env{}, nil, nil, nil)
-	if err == nil {
-		t.Fatal("Run on non-executable hook: want error, got nil")
-	}
-	if !bytes.Contains([]byte(err.Error()), []byte(path)) {
-		t.Fatalf("error %q does not name the hook path %q", err, path)
-	}
+	require.ErrorContains(t, err, path, "error should name the hook path")
 }
 
 func TestRunEnvAndDir(t *testing.T) {
@@ -118,13 +96,9 @@ func TestRunEnvAndDir(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	if err := p.Run(PostStart, env, nil, &stdout, nil); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	require.NoError(t, p.Run(PostStart, env, nil, &stdout, nil))
 	want := "remote|T-1-x|p/T-1/x|" + path + "|" + repo + "|refs/remotes/origin/v18\n" + path + "\n"
-	if stdout.String() != want {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
-	}
+	require.Equal(t, want, stdout.String())
 }
 
 func TestRunDirFallsBackToRepo(t *testing.T) {
@@ -135,12 +109,8 @@ func TestRunDirFallsBackToRepo(t *testing.T) {
 	env := Env{Path: filepath.Join(repo, "gone"), Repo: repo}
 
 	out, err := p.Output(PostEnd, env, nil)
-	if err != nil {
-		t.Fatalf("Output: %v", err)
-	}
-	if out != repo+"\n" {
-		t.Fatalf("cwd = %q, want %q", out, repo+"\n")
-	}
+	require.NoError(t, err)
+	require.Equal(t, repo+"\n", out, "hook cwd")
 }
 
 func TestRunNonZero(t *testing.T) {
@@ -149,12 +119,8 @@ func TestRunNonZero(t *testing.T) {
 
 	err := p.Run(PreEnd, Env{}, nil, nil, nil)
 	var exitErr *ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("error = %v, want *ExitError", err)
-	}
-	if !bytes.Contains([]byte(err.Error()), []byte("pre-end hook (profile remote) failed")) {
-		t.Fatalf("error = %q, want it to name the event and profile", err)
-	}
+	require.ErrorAs(t, err, &exitErr)
+	require.ErrorContains(t, err, "pre-end hook (profile remote) failed", "error should name the event and profile")
 }
 
 // Ctrl-C reaches the whole foreground process group. worktool must outlive
@@ -167,9 +133,7 @@ func TestRunSurvivesInterrupt(t *testing.T) {
 	err := p.Run(PostStart, Env{}, nil, nil, nil)
 
 	var exitErr *ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("error = %v, want *ExitError from the interrupted hook", err)
-	}
+	require.ErrorAs(t, err, &exitErr, "want *ExitError from the interrupted hook")
 }
 
 func TestFirstLine(t *testing.T) {
@@ -182,8 +146,6 @@ func TestFirstLine(t *testing.T) {
 		{"", ""},
 	}
 	for _, tt := range tests {
-		if got := FirstLine(tt.in); got != tt.want {
-			t.Errorf("FirstLine(%q) = %q, want %q", tt.in, got, tt.want)
-		}
+		assert.Equal(t, tt.want, FirstLine(tt.in), "FirstLine(%q)", tt.in)
 	}
 }

@@ -3,8 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoad(t *testing.T) {
@@ -58,9 +60,7 @@ func TestLoad(t *testing.T) {
 
 			cfgPath := filepath.Join(home, "config")
 			if tt.fileContents != nil {
-				if err := os.WriteFile(cfgPath, []byte(*tt.fileContents), 0o644); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.WriteFile(cfgPath, []byte(*tt.fileContents), 0o644))
 				t.Setenv("WORK_CONFIG", cfgPath)
 			} else {
 				t.Setenv("WORK_CONFIG", filepath.Join(home, "does-not-exist"))
@@ -68,28 +68,14 @@ func TestLoad(t *testing.T) {
 
 			got, err := Load()
 			if tt.wantErr != "" {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
-				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
-				}
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			require.NoError(t, err)
 
-			if want := tt.wantBase(home); got.WorktreeBase != want {
-				t.Errorf("WorktreeBase = %q, want %q", got.WorktreeBase, want)
-			}
-
-			if tt.wantPrefixSubstr != "" && !strings.Contains(got.BranchPrefix, tt.wantPrefixSubstr) {
-				t.Errorf("BranchPrefix = %q, want substring %q", got.BranchPrefix, tt.wantPrefixSubstr)
-			}
-			if got.BranchPrefix == "" {
-				t.Errorf("BranchPrefix is empty; default should never be empty")
-			}
+			assert.Equal(t, tt.wantBase(home), got.WorktreeBase)
+			assert.Contains(t, got.BranchPrefix, tt.wantPrefixSubstr)
+			assert.NotEmpty(t, got.BranchPrefix, "default BranchPrefix should never be empty")
 		})
 	}
 }
@@ -97,22 +83,14 @@ func TestLoad(t *testing.T) {
 func TestWorkConfigEnvOverride(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "alt.config")
-	if err := os.WriteFile(cfgPath, []byte("worktree_base=/explicit\nbranch_prefix=zz\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(cfgPath, []byte("worktree_base=/explicit\nbranch_prefix=zz\n"), 0o644))
 	t.Setenv("HOME", tmp)
 	t.Setenv("WORK_CONFIG", cfgPath)
 
 	got, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.WorktreeBase != "/explicit" {
-		t.Errorf("WorktreeBase = %q, want /explicit", got.WorktreeBase)
-	}
-	if got.BranchPrefix != "zz" {
-		t.Errorf("BranchPrefix = %q, want zz", got.BranchPrefix)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/explicit", got.WorktreeBase)
+	assert.Equal(t, "zz", got.BranchPrefix)
 }
 
 func TestConfigDir(t *testing.T) {
@@ -122,12 +100,8 @@ func TestConfigDir(t *testing.T) {
 		t.Setenv("WORK_CONFIG", filepath.Join(tmp, "sub", "config"))
 
 		got, err := Load()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want := filepath.Join(tmp, "sub"); got.Dir != want {
-			t.Errorf("Dir = %q, want %q", got.Dir, want)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(tmp, "sub"), got.Dir)
 	})
 
 	t.Run("default location", func(t *testing.T) {
@@ -136,12 +110,8 @@ func TestConfigDir(t *testing.T) {
 		t.Setenv("WORK_CONFIG", "")
 
 		got, err := Load()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want := filepath.Join(home, ".config", "work"); got.Dir != want {
-			t.Errorf("Dir = %q, want %q", got.Dir, want)
-		}
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(home, ".config", "work"), got.Dir)
 	})
 }
 

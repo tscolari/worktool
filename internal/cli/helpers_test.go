@@ -1,13 +1,14 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/tscolari/worktool/internal/hooks"
 )
@@ -29,9 +30,7 @@ func git(t *testing.T, dir string, args ...string) string {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-	}
+	require.NoError(t, err, "git %s\n%s", strings.Join(args, " "), out)
 	return strings.TrimSpace(string(out))
 }
 
@@ -40,9 +39,7 @@ func git(t *testing.T, dir string, args ...string) string {
 func tempDir(t *testing.T) string {
 	t.Helper()
 	d, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return d
 }
 
@@ -72,9 +69,7 @@ func setupConfig(t *testing.T) (cfgDir, base string) {
 	base = filepath.Join(tempDir(t), "wt")
 	cfg := fmt.Sprintf("worktree_base=%s\nbranch_prefix=tester\n", base)
 	path := filepath.Join(cfgDir, "config")
-	if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(cfg), 0o644))
 	t.Setenv("WORK_CONFIG", path)
 	return cfgDir, base
 }
@@ -83,12 +78,8 @@ func setupConfig(t *testing.T) (cfgDir, base string) {
 func writeHook(t *testing.T, cfgDir, profile string, ev hooks.Event, body string) {
 	t.Helper()
 	dir := filepath.Join(cfgDir, "profiles", profile)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, string(ev)), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, string(ev)), []byte("#!/bin/sh\n"+body+"\n"), 0o755))
 }
 
 // hookLog creates a directory hooks can write into, exported as $HOOK_LOG.
@@ -102,9 +93,7 @@ func hookLog(t *testing.T) string {
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return string(b)
 }
 
@@ -135,9 +124,7 @@ echo "$*$extra" >> %q
 if [ "$1" = "has-session" ]; then exit %d; fi
 exit 0
 `, log, code)
-	if err := os.WriteFile(filepath.Join(bin, "tmux"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "tmux"), []byte(script), 0o755))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("TMUX", "fake")
 	return log
@@ -147,13 +134,9 @@ exit 0
 func noTmux(t *testing.T) {
 	t.Helper()
 	gitPath, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	bin := tempDir(t)
-	if err := os.Symlink(gitPath, filepath.Join(bin, "git")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink(gitPath, filepath.Join(bin, "git")))
 	t.Setenv("PATH", bin)
 	t.Setenv("TMUX", "")
 }
@@ -171,12 +154,8 @@ func tmuxLog(t *testing.T, path string) []string {
 func requireCode(t *testing.T, err error, code int) string {
 	t.Helper()
 	var ce *Error
-	if !errors.As(err, &ce) {
-		t.Fatalf("error = %v (%T), want *cli.Error with code %d", err, err, code)
-	}
-	if ce.Code != code {
-		t.Fatalf("error code = %d (%q), want %d", ce.Code, ce.Msg, code)
-	}
+	require.ErrorAs(t, err, &ce)
+	require.Equal(t, code, ce.Code, "error code (msg %q)", ce.Msg)
 	return ce.Msg
 }
 
@@ -186,8 +165,6 @@ func startWorkspace(t *testing.T, clone, base string, opts StartOptions) string 
 	t.Helper()
 	noTmux(t)
 	t.Chdir(clone)
-	if err := RunWork([]string{"T-1/x"}, opts, &strings.Builder{}, &strings.Builder{}); err != nil {
-		t.Fatalf("RunWork: %v", err)
-	}
+	require.NoError(t, RunWork([]string{"T-1/x"}, opts, &strings.Builder{}, &strings.Builder{}))
 	return filepath.Join(base, "T-1-x")
 }

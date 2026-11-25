@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/tscolari/worktool/internal/gitx"
 	"github.com/tscolari/worktool/internal/hooks"
 )
@@ -17,15 +19,10 @@ func TestStartNoProfileUnchanged(t *testing.T) {
 
 	path := startWorkspace(t, clone, base, StartOptions{})
 
-	if !exists(path) {
-		t.Fatalf("worktree %s not created", path)
-	}
-	if got := git(t, path, "rev-parse", "--abbrev-ref", "HEAD"); got != testBranch {
-		t.Fatalf("worktree branch = %q, want %q", got, testBranch)
-	}
-	if got, _ := gitx.BranchConfig(clone, testBranch, profileKey); got != "" {
-		t.Fatalf("workProfile = %q, want unset", got)
-	}
+	require.DirExists(t, path)
+	require.Equal(t, testBranch, git(t, path, "rev-parse", "--abbrev-ref", "HEAD"), "worktree branch")
+	got, _ := gitx.BranchConfig(clone, testBranch, profileKey)
+	require.Empty(t, got, "workProfile should be unset")
 }
 
 func TestStartFrom(t *testing.T) {
@@ -34,12 +31,10 @@ func TestStartFrom(t *testing.T) {
 
 	path := startWorkspace(t, clone, base, StartOptions{From: "origin/branch/v18"})
 
-	if got, want := git(t, path, "rev-parse", "HEAD"), git(t, clone, "rev-parse", "origin/branch/v18"); got != want {
-		t.Fatalf("worktree HEAD = %s, want origin/branch/v18 %s", got, want)
-	}
-	if got, _ := gitx.BranchConfig(clone, testBranch, "merge"); got != "" {
-		t.Fatalf("branch merge = %q, want no upstream", got)
-	}
+	require.Equal(t, git(t, clone, "rev-parse", "origin/branch/v18"), git(t, path, "rev-parse", "HEAD"),
+		"worktree HEAD should be origin/branch/v18")
+	got, _ := gitx.BranchConfig(clone, testBranch, "merge")
+	require.Empty(t, got, "branch should have no upstream")
 }
 
 func TestStartFromUnknownRef(t *testing.T) {
@@ -53,12 +48,9 @@ func TestStartFromUnknownRef(t *testing.T) {
 			err := RunWork([]string{"T-1/x"}, StartOptions{From: ref}, &strings.Builder{}, &strings.Builder{})
 
 			requireCode(t, err, 1)
-			if ok, _ := gitx.BranchExists(clone, testBranch); ok {
-				t.Fatal("branch created despite unknown --from")
-			}
-			if exists(filepath.Join(base, "T-1-x")) {
-				t.Fatal("worktree created despite unknown --from")
-			}
+			ok, _ := gitx.BranchExists(clone, testBranch)
+			require.False(t, ok, "branch created despite unknown --from")
+			require.NoDirExists(t, filepath.Join(base, "T-1-x"), "worktree created despite unknown --from")
 		})
 	}
 }
@@ -72,12 +64,9 @@ func TestStartUnknownProfile(t *testing.T) {
 	err := RunWork([]string{"T-1/x"}, StartOptions{Profile: "ghost"}, &strings.Builder{}, &strings.Builder{})
 
 	requireCode(t, err, 1)
-	if ok, _ := gitx.BranchExists(clone, testBranch); ok {
-		t.Fatal("branch created despite unknown profile")
-	}
-	if exists(filepath.Join(base, "T-1-x")) {
-		t.Fatal("worktree created despite unknown profile")
-	}
+	ok, _ := gitx.BranchExists(clone, testBranch)
+	require.False(t, ok, "branch created despite unknown profile")
+	require.NoDirExists(t, filepath.Join(base, "T-1-x"), "worktree created despite unknown profile")
 }
 
 func TestStartPostStartEnv(t *testing.T) {
@@ -90,12 +79,9 @@ func TestStartPostStartEnv(t *testing.T) {
 	startWorkspace(t, clone, base, StartOptions{Profile: "remote", From: "origin/branch/v18"})
 
 	want := "refs/remotes/origin/branch/v18 " + git(t, clone, "rev-parse", "origin/branch/v18") + " " + testBranch + "\n"
-	if got := readFile(t, filepath.Join(logDir, "post-start")); got != want {
-		t.Fatalf("post-start saw %q, want %q", got, want)
-	}
-	if got, _ := gitx.BranchConfig(clone, testBranch, profileKey); got != "remote" {
-		t.Fatalf("workProfile = %q, want remote", got)
-	}
+	require.Equal(t, want, readFile(t, filepath.Join(logDir, "post-start")), "post-start env")
+	got, _ := gitx.BranchConfig(clone, testBranch, profileKey)
+	require.Equal(t, "remote", got, "workProfile")
 }
 
 func TestStartPostStartRollback(t *testing.T) {
@@ -108,15 +94,11 @@ func TestStartPostStartRollback(t *testing.T) {
 	err := RunWork([]string{"T-1/x"}, StartOptions{Profile: "remote"}, &strings.Builder{}, &strings.Builder{})
 
 	requireCode(t, err, 1)
-	if ok, _ := gitx.BranchExists(clone, testBranch); ok {
-		t.Fatal("branch left behind after post-start failure")
-	}
-	if exists(filepath.Join(base, "T-1-x")) {
-		t.Fatal("worktree left behind after post-start failure")
-	}
-	if got, _ := gitx.BranchConfig(clone, testBranch, profileKey); got != "" {
-		t.Fatalf("workProfile = %q left behind after rollback", got)
-	}
+	ok, _ := gitx.BranchExists(clone, testBranch)
+	require.False(t, ok, "branch left behind after post-start failure")
+	require.NoDirExists(t, filepath.Join(base, "T-1-x"), "worktree left behind after post-start failure")
+	got, _ := gitx.BranchConfig(clone, testBranch, profileKey)
+	require.Empty(t, got, "workProfile left behind after rollback")
 }
 
 func TestStartSessionCommand(t *testing.T) {
@@ -136,15 +118,11 @@ func TestStartSessionCommand(t *testing.T) {
 			log := fakeTmux(t, false)
 			t.Chdir(clone)
 
-			if err := RunWork([]string{"T-1/x"}, StartOptions{Profile: "remote"}, &strings.Builder{}, &strings.Builder{}); err != nil {
-				t.Fatalf("RunWork: %v", err)
-			}
+			require.NoError(t, RunWork([]string{"T-1/x"}, StartOptions{Profile: "remote"}, &strings.Builder{}, &strings.Builder{}))
 
-			want := "new-session -d -s T-1-x -c " + filepath.Join(base, "T-1-x") + tt.wantTail
 			lines := tmuxLog(t, log)
-			if len(lines) == 0 || lines[0] != want {
-				t.Fatalf("tmux calls = %q, want first %q", lines, want)
-			}
+			require.NotEmpty(t, lines, "no tmux calls")
+			require.Equal(t, "new-session -d -s T-1-x -c "+filepath.Join(base, "T-1-x")+tt.wantTail, lines[0], "first tmux call")
 		})
 	}
 }

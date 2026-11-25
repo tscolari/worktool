@@ -1,11 +1,12 @@
 package gitx
 
 import (
-	"errors"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // isolateGit keeps the developer's global and system git config (signing,
@@ -25,9 +26,7 @@ func git(t *testing.T, dir string, args ...string) string {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-	}
+	require.NoError(t, err, "git %s\n%s", strings.Join(args, " "), out)
 	return strings.TrimSpace(string(out))
 }
 
@@ -53,20 +52,13 @@ func TestWorktreeAddNoTrack(t *testing.T) {
 	clone := newClone(t)
 	wt := filepath.Join(t.TempDir(), "wt")
 
-	if err := WorktreeAdd(clone, wt, "tester/T-1/x", "origin/branch/v18"); err != nil {
-		t.Fatalf("WorktreeAdd: %v", err)
-	}
+	require.NoError(t, WorktreeAdd(clone, wt, "tester/T-1/x", "origin/branch/v18"))
 
 	merge, err := BranchConfig(clone, "tester/T-1/x", "merge")
-	if err != nil {
-		t.Fatalf("BranchConfig: %v", err)
-	}
-	if merge != "" {
-		t.Fatalf("branch.tester/T-1/x.merge = %q, want unset (--no-track)", merge)
-	}
-	if got, want := git(t, wt, "rev-parse", "HEAD"), git(t, clone, "rev-parse", "origin/branch/v18"); got != want {
-		t.Fatalf("worktree HEAD = %s, want origin/branch/v18 %s", got, want)
-	}
+	require.NoError(t, err)
+	require.Empty(t, merge, "branch.tester/T-1/x.merge should be unset (--no-track)")
+	require.Equal(t, git(t, clone, "rev-parse", "origin/branch/v18"), git(t, wt, "rev-parse", "HEAD"),
+		"worktree HEAD should be origin/branch/v18")
 }
 
 func TestResolveBase(t *testing.T) {
@@ -97,17 +89,12 @@ func TestResolveBase(t *testing.T) {
 			}
 			ref, commit, err := ResolveBase(clone, tt.ref)
 			if tt.wantUnknown {
-				if !errors.Is(err, ErrUnknownRef) {
-					t.Fatalf("ResolveBase(%q) error = %v, want ErrUnknownRef", tt.ref, err)
-				}
+				require.ErrorIs(t, err, ErrUnknownRef)
 				return
 			}
-			if err != nil {
-				t.Fatalf("ResolveBase(%q): %v", tt.ref, err)
-			}
-			if ref != tt.wantRef || commit != tt.wantCommit {
-				t.Fatalf("ResolveBase(%q) = %q, %q; want %q, %q", tt.ref, ref, commit, tt.wantRef, tt.wantCommit)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantRef, ref)
+			require.Equal(t, tt.wantCommit, commit)
 		})
 	}
 }
@@ -117,17 +104,13 @@ func TestBranchConfigRoundTrip(t *testing.T) {
 	branch := "tester/T-1/x.y"
 	git(t, clone, "branch", branch)
 
-	if err := SetBranchConfig(clone, branch, "workProfile", "remote"); err != nil {
-		t.Fatalf("SetBranchConfig: %v", err)
-	}
+	require.NoError(t, SetBranchConfig(clone, branch, "workProfile", "remote"))
 	got, err := BranchConfig(clone, branch, "workProfile")
-	if err != nil || got != "remote" {
-		t.Fatalf("BranchConfig = %q, %v; want remote, nil", got, err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "remote", got)
 
 	git(t, clone, "branch", "-D", branch)
 	got, err = BranchConfig(clone, branch, "workProfile")
-	if err != nil || got != "" {
-		t.Fatalf("BranchConfig after branch -D = %q, %v; want \"\", nil", got, err)
-	}
+	require.NoError(t, err)
+	require.Empty(t, got, "BranchConfig after branch -D")
 }
