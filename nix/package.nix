@@ -23,7 +23,7 @@ buildGoModule {
     ];
   };
 
-  vendorHash = "sha256-7K17JaXFsjf163g5PXCb5ng2gYdotnZ2IDKk8KFjNj0=";
+  vendorHash = "sha256-pOZLp9snmQZ8ekKNruqk7SsO6Y+y1amslT9aYP9mG3Y=";
 
   subPackages = [ "cmd/work" ];
 
